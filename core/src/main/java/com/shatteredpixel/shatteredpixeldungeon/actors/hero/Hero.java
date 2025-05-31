@@ -238,7 +238,8 @@ public class Hero extends Char {
 
 	public Hero() {
 		super();
-
+        limbHealth = new LimbHealth(10, 20, 10, 10, 15); // Голова: 10, Торс: 20, Руки: 5, Ноги: 10
+		name = Messages.get(this, "name");
 		HP = HT = 20;
 		STR = STARTING_STR;
 		
@@ -293,50 +294,16 @@ public class Hero extends Char {
 	private static final String HTBOOST     = "htboost";
 	
 	@Override
-	public void storeInBundle( Bundle bundle ) {
+    public void storeInBundle(Bundle bundle) {
+        super.storeInBundle(bundle);
+        limbHealth.storeInBundle(bundle);
+    }
 
-		super.storeInBundle( bundle );
-
-		bundle.put( CLASS, heroClass );
-		bundle.put( SUBCLASS, subClass );
-		bundle.put( ABILITY, armorAbility );
-		Talent.storeTalentsInBundle( bundle, this );
-		
-		bundle.put( ATTACK, attackSkill );
-		bundle.put( DEFENSE, defenseSkill );
-		
-		bundle.put( STRENGTH, STR );
-		
-		bundle.put( LEVEL, lvl );
-		bundle.put( EXPERIENCE, exp );
-		
-		bundle.put( HTBOOST, HTBoost );
-
-		belongings.storeInBundle( bundle );
-	}
-	
-	@Override
-	public void restoreFromBundle( Bundle bundle ) {
-
-		lvl = bundle.getInt( LEVEL );
-		exp = bundle.getInt( EXPERIENCE );
-
-		HTBoost = bundle.getInt(HTBOOST);
-
-		super.restoreFromBundle( bundle );
-
-		heroClass = bundle.getEnum( CLASS, HeroClass.class );
-		subClass = bundle.getEnum( SUBCLASS, HeroSubClass.class );
-		armorAbility = (ArmorAbility)bundle.get( ABILITY );
-		Talent.restoreTalentsFromBundle( bundle, this );
-		
-		attackSkill = bundle.getInt( ATTACK );
-		defenseSkill = bundle.getInt( DEFENSE );
-		
-		STR = bundle.getInt( STRENGTH );
-
-		belongings.restoreFromBundle( bundle );
-	}
+    @Override
+    public void restoreFromBundle(Bundle bundle) {
+        super.restoreFromBundle(bundle);
+        limbHealth.restoreFromBundle(bundle);
+    }
 	
 	public static void preview( GamesInProgress.Info info, Bundle bundle ) {
 		info.level = bundle.getInt( LEVEL );
@@ -1542,94 +1509,35 @@ public class Hero extends Char {
 			return super.glyphLevel(cls);
 		}
 	}
+    @Override
+	public void damage(int dmg, Object src) {
+        if (buff(Invulnerability.class) != null) return;
 
-	@Override
-	public void damage( int dmg, Object src ) {
-		if (buff(TimekeepersHourglass.timeStasis.class) != null
-				|| buff(TimeStasis.class) != null) {
-			return;
-		}
+        // Распределяем урон случайным образом (можно настроить логику)
+        Random.Float rand = Random.Float();
+        LimbHealth.Limb targetLimb;
+        if (rand < 0.2f) targetLimb = limbHealth.head;
+        else if (rand < 0.5f) targetLimb = limbHealth.torso;
+        else if (rand < 0.7f) targetLimb = limbHealth.leftArm;
+        else if (rand < 0.9f) targetLimb = limbHealth.rightArm;
+        else targetLimb = limbHealth.legs;
 
-		//regular damage interrupt, triggers on any damage except specific mild DOT effects
-		// unless the player recently hit 'continue moving', in which case this is ignored
-		if (!(src instanceof Hunger || src instanceof Viscosity.DeferedDamage) && damageInterrupt) {
-			interrupt();
-		}
+        targetLimb.HP = Math.max(0, targetLimb.HP - dmg);
+        GLog.i("%s takes %d damage to %s", name, dmg, getLimbName(targetLimb));
 
-		if (this.buff(Drowsy.class) != null){
-			Buff.detach(this, Drowsy.class);
-			GLog.w( Messages.get(this, "pain_resist") );
-		}
+        if (!limbHealth.isAlive()) {
+            die(src);
+        }
+    }
 
-		//temporarily assign to a float to avoid rounding a bunch
-		float damage = dmg;
-
-		Endure.EndureTracker endure = buff(Endure.EndureTracker.class);
-		if (!(src instanceof Char)){
-			//reduce damage here if it isn't coming from a character (if it is we already reduced it)
-			if (endure != null){
-				damage = endure.adjustDamageTaken(dmg);
-			}
-			//the same also applies to challenge scroll damage reduction
-			if (buff(ScrollOfChallenge.ChallengeArena.class) != null){
-				damage *= 0.67f;
-			}
-			//and to monk meditate damage reduction
-			if (buff(MonkEnergy.MonkAbility.Meditate.MeditateResistance.class) != null){
-				damage *= 0.2f;
-			}
-		}
-
-		//unused, could be removed
-		CapeOfThorns.Thorns thorns = buff( CapeOfThorns.Thorns.class );
-		if (thorns != null) {
-			damage = thorns.proc((int)damage, (src instanceof Char ? (Char)src : null),  this);
-		}
-
-		if (buff(Talent.WarriorFoodImmunity.class) != null){
-			if (pointsInTalent(Talent.IRON_STOMACH) == 1)       damage /= 4f;
-			else if (pointsInTalent(Talent.IRON_STOMACH) == 2)  damage = 0;
-		}
-
-		dmg = Math.round(damage);
-
-		//we ceil this one to avoid letting the player easily take 0 dmg from tenacity early
-		dmg = (int)Math.ceil(dmg * RingOfTenacity.damageMultiplier( this ));
-
-		int preHP = HP + shielding();
-		if (src instanceof Hunger) preHP -= shielding();
-		super.damage( dmg, src );
-		int postHP = HP + shielding();
-		if (src instanceof Hunger) postHP -= shielding();
-		int effectiveDamage = preHP - postHP;
-
-		if (effectiveDamage <= 0) return;
-
-		if (buff(Challenge.DuelParticipant.class) != null){
-			buff(Challenge.DuelParticipant.class).addDamage(effectiveDamage);
-		}
-
-		//flash red when hit for serious damage.
-		float percentDMG = effectiveDamage / (float)preHP; //percent of current HP that was taken
-		float percentHP = 1 - ((HT - postHP) / (float)HT); //percent health after damage was taken
-		// The flash intensity increases primarily based on damage taken and secondarily on missing HP.
-		float flashIntensity = 0.25f * (percentDMG * percentDMG) / percentHP;
-		//if the intensity is very low don't flash at all
-		if (flashIntensity >= 0.05f){
-			flashIntensity = Math.min(1/3f, flashIntensity); //cap intensity at 1/3
-			GameScene.flash( (int)(0xFF*flashIntensity) << 16 );
-			if (isAlive()) {
-				if (flashIntensity >= 1/6f) {
-					Sample.INSTANCE.play(Assets.Sounds.HEALTH_CRITICAL, 1/3f + flashIntensity * 2f);
-				} else {
-					Sample.INSTANCE.play(Assets.Sounds.HEALTH_WARN, 1/3f + flashIntensity * 4f);
-				}
-				//hero gets interrupted on taking serious damage, regardless of any other factor
-				interrupt();
-				damageInterrupt = true;
-			}
-		}
-	}
+    // Вспомогательный метод для отображения имени конечности
+    private String getLimbName(LimbHealth.Limb limb) {
+        if (limb == limbHealth.head) return "head";
+        if (limb == limbHealth.torso) return "torso";
+        if (limb == limbHealth.leftArm) return "left arm";
+        if (limb == limbHealth.rightArm) return "right arm";
+        return "legs";
+    }
 	
 	public void checkVisibleMobs() {
 		ArrayList<Mob> visible = new ArrayList<>();

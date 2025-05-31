@@ -241,88 +241,18 @@ public class StatusPane extends Component {
 
 	@Override
 	public void update() {
-		super.update();
-		
-		int health = Dungeon.hero.HP;
-		int shield = Dungeon.hero.shielding();
-		int max = Dungeon.hero.HT;
+		Hero hero = Dungeon.hero;
+        LimbHealth health = hero.limbHealth;
 
-		if (!Dungeon.hero.isAlive()) {
-			avatar.tint(0x000000, 0.5f);
-		} else if ((health/(float)max) <= 0.3f) {
-			warning += Game.elapsed * 5f *(0.4f - (health/(float)max));
-			warning %= 1f;
-			avatar.tint(ColorMath.interpolate(warning, warningColors), 0.5f );
-		} else if (talentBlink > 0.33f){ //stops early so it doesn't end in the middle of a blink
-			talentBlink -= Game.elapsed;
-			avatar.tint(1, 1, 0, (float)Math.abs(Math.cos(talentBlink*FLASH_RATE))/2f);
-		} else {
-			avatar.resetColor();
-		}
+        // Пример: обновление текста для каждой конечности
+        StringBuilder healthText = new StringBuilder();
+        healthText.append("Head: ").append(health.head.HP).append("/").append(health.head.HT).append("\n");
+        healthText.append("Torso: ").append(health.torso.HP).append("/").append(health.torso.HT).append("\n");
+        healthText.append("Left Arm: ").append(health.leftArm.HP).append("/").append(health.leftArm.HT).append("\n");
+        healthText.append("Right Arm: ").append(health.rightArm.HP).append("/").append(health.rightArm.HT).append("\n");
+        healthText.append("Legs: ").append(health.legs.HP).append("/").append(health.legs.HT);
 
-		hp.scale.x = Math.max( 0, (health-shield)/(float)max);
-		shieldedHP.scale.x = health/(float)max;
-
-		if (shield > health) {
-			rawShielding.scale.x = Math.min(1, shield / (float) max);
-		} else {
-			rawShielding.scale.x = 0;
-		}
-
-		if (oldHP != health || oldShield != shield || oldMax != max){
-			if (shield <= 0) {
-				hpText.text(health + "/" + max);
-			} else {
-				hpText.text(health + "+" + shield + "/" + max);
-			}
-			oldHP = health;
-			oldShield = shield;
-			oldMax = max;
-		}
-
-		if (large) {
-			exp.scale.x = (128 / exp.width) * Dungeon.hero.exp / Dungeon.hero.maxExp();
-
-			hpText.measure();
-			hpText.x = hp.x + (128 - hpText.width())/2f;
-
-			expText.text(Dungeon.hero.exp + "/" + Dungeon.hero.maxExp());
-			expText.measure();
-			expText.x = hp.x + (128 - expText.width())/2f;
-
-		} else {
-			exp.scale.x = (width / exp.width) * Dungeon.hero.exp / Dungeon.hero.maxExp();
-		}
-
-		if (Dungeon.hero.lvl != lastLvl) {
-
-			if (lastLvl != -1) {
-				showStarParticles();
-			}
-
-			lastLvl = Dungeon.hero.lvl;
-
-			if (large){
-				level.text( "lv. " + lastLvl );
-				level.measure();
-				level.x = x + (30f - level.width()) / 2f;
-				level.y = y + 33f - level.baseLine() / 2f;
-			} else {
-				level.text( Integer.toString( lastLvl ) );
-				level.measure();
-				level.x = x + 27.5f - level.width() / 2f;
-				level.y = y + 28.0f - level.baseLine() / 2f;
-			}
-			PixelScene.align(level);
-		}
-
-		int tier = Dungeon.hero.tier();
-		if (tier != lastTier) {
-			lastTier = tier;
-			avatar.copy( HeroSprite.avatar( Dungeon.hero ) );
-		}
-
-		counter.setSweep((1f - Actor.now()%1f)%1f);
+        healthTextView.text(healthText.toString());
 	}
 
 	public void updateAvatar(){

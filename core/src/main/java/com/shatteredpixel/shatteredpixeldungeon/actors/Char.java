@@ -165,8 +165,7 @@ public abstract class Char extends Actor {
 	
 	public CharSprite sprite;
 	
-	public int HT;
-	public int HP;
+	protected LimbHealth limbHealth;
 	
 	protected float baseSpeed	= 1;
 	protected PathFinder.Path path;
